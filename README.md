@@ -1,62 +1,67 @@
-# Sistema de Controle de Nível de Líquido via LoRa (RFM95) 🌊📡
+# Sistema de Controle de Nível de Líquido via LoRa 🌊📡
 
-Um sistema robusto de telemetria e controle desenvolvido em **C++**, utilizando comunicação de radiofrequência LoRa (915 MHz) para o monitoramento remoto do nível de líquidos. O sistema avalia sensores analógicos e transmite comandos sem fio para acionamento de atuadores (como bombas d'água), com foco em resiliência e baixo consumo de energia.
-
-## 🚀 Arquitetura do Projeto
-
-A rede opera em topologia Ponto-a-Ponto (Ping & Pong) com endereçamento customizado e é dividida em dois nós principais:
-
-### 1. Nó Transmissor (Sensor)
-* **Endereço de Rede:** `0xA0`
-* **Funcionamento:** Realiza a leitura de tensão de dois sensores conectados aos pinos analógicos `A0` e `A1`. 
-* **Lógica de Controle:**
-  * Se a tensão em ambos os pinos for menor que `0.15V` (indicando nível baixo), acorda o módulo de rádio e transmite o comando `"ligar"`.
-  * Se a tensão no pino `A1` for maior que `0.15V` (indicando nível alto/seguro), transmite o comando `"desligar"`.
-* **Eficiência Energética:** Após o envio da mensagem (a cada 5 segundos), o módulo LoRa entra em modo `sleep()` para conservação profunda de bateria.
-
-### 2. Nó Receptor (Atuador)
-* **Endereço de Rede:** `0xB0`
-* **Funcionamento:** Fica em modo de escuta ativa. Filtra as mensagens pelo endereço de destino para ignorar ruídos ou pacotes de outras redes.
-* **Lógica de Acionamento:** Ao receber o comando `"ligar"`, aciona o pino digital `4` (estado `HIGH`), ideal para acionar um módulo relé. Ao receber `"desligar"`, corta a energia do pino `4` (`LOW`).
-* **Monitoramento de Sinal:** Extrai e exibe dados críticos da rede, como **RSSI** (Força do Sinal) e **SNR** (Relação Sinal-Ruído), permitindo o mapeamento da qualidade do link de rádio.
+Um sistema robusto de telemetria e controle desenvolvido em **C++**, utilizando comunicação de radiofrequência LoRa (915 MHz) para o monitoramento remoto do nível de líquidos. O projeto evoluiu de uma arquitetura básica ponto-a-ponto para uma rede com **Quality of Service (QoS)**, focando em resiliência, tolerância a falhas e telemetria avançada.
 
 ---
 
-## 🛠️ Tecnologias e Hardware
+## 🚀 Arquitetura e Evolução do Projeto
 
-* **Linguagem:** C/C++ (Padrão Arduino)
-* **Comunicação:** Módulos LoRa RFM95 (Frequência `915E6` - 915 MHz)
-* **Microcontrolador:** Compatível com arquiteturas Arduino (Uno, Nano, Mega)
-* **Bibliotecas:** 
-  * `SPI.h` (Comunicação de barramento padrão)
-  * `LoRa.h` (Driver do rádio LoRa)
+O repositório está dividido em duas abordagens arquiteturais:
+
+### 📡 Versão 1: Ponto-a-Ponto (Ping & Pong)
+Focada em baixo consumo e endereçamento customizado.
+* **Transmissor (Sensor):** Lê a tensão em dois pinos analógicos (`A0` e `A1`). Se a tensão for < `0.15V` (nível baixo), envia `"ligar"`. Se > `0.15V` (nível alto), envia `"desligar"`. Após o envio, o módulo entra em `sleep()` para conservação profunda de bateria.
+* **Receptor (Atuador):** Fica em escuta ativa. Filtra pacotes pelo endereço de destino (`0xB0`) e aciona um módulo relé (`D4`) conforme o comando recebido.
+
+### 📶 Versão 2: Quality of Service e ESP32 (Pasta `V2_LoRa_QoS_LilygoT3`)
+Evolução do sistema utilizando placas **Lilygo T3 (ESP32)**, introduzindo conceitos de redes de alta confiabilidade:
+* **Confirmação de Recebimento (ACK):** O transmissor aguarda a confirmação de entrega do pacote pelo receptor. Se falhar, o sistema registra a perda, garantindo previsibilidade da comunicação.
+* **Telemetria de Rede Dinâmica:** Cálculo em tempo real da taxa de perda de pacotes (`packetLossRate`), além da extração de **RSSI** e **SNR** para avaliar a saúde do link de rádio.
+* **Interface OLED Local:** Integração com display OLED (`SSD1306Wire`) no receptor para monitoramento em tempo real do status da bomba, nível e qualidade do sinal, dispensando o monitor serial.
+
+---
+
+## 🛠️ Tecnologias Utilizadas
+
+* **Linguagem:** C/C++ 
+* **Protocolo de Rádio:** LoRa (915 MHz) via módulos RFM95 e Lilygo T3
+* **Bibliotecas:** `SPI.h`, `LoRa.h` (Sandeep Mistry), `SSD1306Wire.h` (Display OLED)
 
 ---
 
 ## 🔌 Pinagem e Esquema de Ligação
 
-A comunicação entre o microcontrolador e o transceptor LoRa utiliza o barramento SPI em alta velocidade (`8E6` / MSBFIRST). As ligações devem ser feitas estritamente conforme o esquema abaixo para ambos os nós:
+Como o projeto suporta duas placas diferentes, as ligações do barramento SPI e dos sensores/atuadores devem seguir o hardware escolhido:
 
-| Pino LoRa (RFM95) | Pino Microcontrolador | Função |
-| :--- | :--- | :--- |
-| **MISO** | D12 | Master In Slave Out |
-| **MOSI** | D11 | Master Out Slave In |
-| **SCK** | D13 | Serial Clock |
-| **NSS / CS** | D10 | Chip Select |
-| **RESET** | D9 | Reset do Módulo |
-| **DIO0 / IRQ** | D8 | Interrupção |
+### Hardware V1 (Arduino Uno/Nano + RFM95)
+| Função | Pino LoRa (RFM95) | Pino Arduino | Conexões Extras |
+| :--- | :--- | :--- | :--- |
+| **MISO** | MISO | D12 | **Sensores (TX):** A0 e A1 |
+| **MOSI** | MOSI | D11 | **Relé (RX):** D4 |
+| **SCK** | SCK  | D13 | |
+| **NSS** | NSS/CS | D10 | |
+| **RST** | RESET | D9 | |
+| **IRQ** | DIO0 | D8 | |
 
-**Conexões Extras (Específicas de cada Nó):**
-* **Transmissor:** Conectar os sensores de nível (ou boias atuando como divisores de tensão) nas portas analógicas `A0` e `A1`.
-* **Receptor:** Conectar o atuador/relé na porta digital `D4`.
+### Hardware V2 (Lilygo T3 - ESP32)
+| Função | Pino LoRa Interno | Pino ESP32 | Conexões Extras |
+| :--- | :--- | :--- | :--- |
+| **MISO** | MISO | GPIO 19 | **Sensores (TX):** GPIO 34 e 35 |
+| **MOSI** | MOSI | GPIO 27 | **Relé (RX):** GPIO 12 |
+| **SCK** | SCK  | GPIO 5  | **Display OLED:** I2C (SDA/SCL) |
+| **NSS** | CS   | GPIO 18 | |
+| **RST** | RESET | GPIO 15 (TX) / 23 (RX) | |
+| **IRQ** | DIO0 | GPIO 26 | |
 
 ---
 
 ## 💡 Como executar o projeto
 
-1. Faça o clone deste repositório na sua máquina local.
-2. Abra os códigos utilizando a [Arduino IDE](https://www.arduino.cc/en/software) ou [PlatformIO](https://platformio.org/).
-3. Certifique-se de instalar a biblioteca `LoRa` gerenciada por Sandeep Mistry via Library Manager.
-4. Faça o upload do código `Transmissor` para a placa remota (que ficará no reservatório).
-5. Faça o upload do código `Receptor` para a placa base (que controlará a bomba).
-6. Abra o Monitor Serial (baud rate: `9600`) para inspecionar os pacotes, voltagens lidas e a qualidade do sinal (RSSI/SNR).
+1. Faça o clone deste repositório.
+2. Abra a pasta correspondente à versão desejada na [Arduino IDE](https://www.arduino.cc/en/software) ou [PlatformIO](https://platformio.org/).
+3. Certifique-se de instalar a biblioteca `LoRa` e, caso utilize a V2, a biblioteca `ESP8266 and ESP32 OLED driver for SSD1306 displays`.
+4. Faça o upload do código **Transmissor** para a placa que monitorará o líquido.
+5. Faça o upload do código **Receptor** para a placa base que controlará a bomba d'água.
+6. Abra o Monitor Serial para inspecionar o tráfego:
+   * **Para a V1:** Utilize o *baud rate* de `9600`.
+   * **Para a V2:** Utilize o *baud rate* de `115200` para acompanhar o cálculo de perda de pacotes e o recebimento de ACKs.
